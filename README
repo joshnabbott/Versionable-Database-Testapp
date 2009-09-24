@@ -1,8 +1,1 @@
-== GIT Audit Trail Plugin
-- Uses git to version control your ActiveRecord object
-- Versions are stored in YAML files so they can be easily read by humans or loaded into objects
-
-== HOW IT WORKS:
-Version control ActiveRecord model DATA with git. When a model is first activated for Git version controlling of it's records, a YAML file gets created containing the data for the ActiveRecord model. With each modification to the data, a new commit is created for the file storing the most recent data.
-
-This happens by creating a new dir in the app root named "versions". This directory will store a separate YAML file for each "versioned" model. This directory is ignored by the applications Git repository, and a new repository is created inside that tracks only its contents.
+A simple test application to show the versionable-database gem in action.
