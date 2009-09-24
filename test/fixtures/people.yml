@@ -1,0 +1,15 @@
+# Read about fixtures at http://ar.rubyonrails.org/classes/Fixtures.html
+
+one:
+  name_first: MyString
+  name_last: MyString
+  birthdate: 2009-09-22
+  age: 1
+  is_living: false
+
+two:
+  name_first: MyString
+  name_last: MyString
+  birthdate: 2009-09-22
+  age: 1
+  is_living: false

@@ -1,0 +1,168 @@
+= Versionable Database
+==== Version control model data using Git
+
+=== WTF?
+
+Versionable is sort of a prototype gem I wrote to version control Ruby on Rails model data using Git.
+
+About a year and a half ago I wrote the 'acts_as_loggable' (http://github.com/joshnabbott/acts_as_loggable) plugin which would basically create a row in the database each time a record was saved or edited with the currently logged in user's id and a time-stamp. While I had planned on adding features to store the changes using ActiveRecord's dirty objects, I never got around to doing it (if you would like to fork the project and add that functionality - you're more than welcome to! Let me know so I can apply the feature.)
+
+So a year and a half later we've been given some requirements to build a reporting platform that would allow the business to query on all sorts of data as it was during a certain period of time. For example: generate a report of all products that we were selling for < $100 between March 1, 2005 - Present. Or a report that reflects how many products were active on the site between January 1, 2008 - December 31, 2008.
+
+After thinking about these requirements a bit I really thought it sounded more like we needed a way to "version control" our model data. Effectively taking snapshots of data each time it is modified so we would:
+* Have a record of what was changed, how it was changed, and when it was changed
+* Be able to query across certain time frames and see the data reflected as it was during those time frames
+* Have the ability to instantiate an instance of the object from any snapshot so the object would be exactly what it was at that point in time.
+
+Among other things, all of those combined really added up to writing an SCM but for model data. And since I'm, well, lazy, I got to thinking: why spend months developing some sort of platform that allows us to use a database to store "snapshots" of model data, writing a bunch of utility methods that allow us to query quickly and accurately across all the data, and then actually finding the time to code the damn thing when I could just use Git?
+
+Obviously, I decided that was dumb and went for the easy way out.
+
+=== Enter Versionable
+
+Enter Versionable. It's a Ruby gem that basically uses `after_save` and `after_destroy` hooks to convert the object to yaml, write it to a file, then make a commit with the latest version of the object all with a very clear and concise commit message.
+
+By default Versionable files are stored in RAILS_ROOT + /versions, but you can specify another directory. See that below in Examples.
+
+Within the /versions directory (or whatever you end up naming your versions directory), a directory is created for each model that is Versionable. For example, if you have two models using Versionable named Article and User, you would see something like this in the versioning directory:
+  |-- versions
+      |-- articles
+      |   |-- articles.yml
+      |   |-- article-1.yml
+      |   |-- article-2.yml
+      |   `-- article-3.yml
+      `-- users
+          |-- users.yml
+          |-- user-1.yml
+          |-- user-2.yml
+          |-- user-3.yml
+          `-- user-4.yml
+
+As you may have guessed, the &lt;plural-name&gt;.yml is the most recent snapshot of each model record in yaml format. Think of it sort of like the `index` action. I'm honestly not 100% sure what this would be used for, but it seemed to make sense at the time I was writing the gem. An example of what you would see in this file is:
+  --- 
+  - !ruby/object:Person 
+    attributes: 
+      updated_at: 2009-09-23 20:57:51
+      birthdate: "1978-01-17"
+      id: "4"
+      is_living: "0"
+      age: "31"
+      name_first: Joshua
+      name_last: Abbott
+      created_at: 2009-09-23 04:15:01
+    attributes_cache: {}
+
+  - !ruby/object:Person 
+    attributes: 
+      updated_at: 2009-09-23 04:35:02
+      birthdate: "1982-05-12"
+      id: "5"
+      is_living: "1"
+      age: "27"
+      name_first: Amber
+      name_last: Jarvis
+      created_at: 2009-09-23 04:35:02
+    attributes_cache: {}
+
+  - !ruby/object:Person 
+    attributes: 
+      updated_at: 2009-09-23 06:14:22
+      birthdate: "2002-05-12"
+      id: "5"
+      is_living: "1"
+      age: "6"
+      name_first: Hayden
+      name_last: Roberts
+      created_at: 2009-09-23 06:14:22
+    attributes_cache: {}
+
+The &lt;singular_name-id&gt;.yml is the yaml representation of the current model object. An example of what you would find here is:
+  --- &id001 !ruby/object:Person 
+  attributes: 
+    updated_at: 2009-09-23 20:57:51.206652 Z
+    birthdate: 2009-01-17
+    id: "4"
+    is_living: "0"
+    age: "31"
+    name_first: Joshua
+    name_last: Abbott
+    created_at: 2009-09-23 04:15:01
+  attributes_cache: {}
+
+  changed_attributes: 
+    updated_at: 2009-09-23 20:13:51 Z
+    is_living: true
+  errors: !ruby/object:ActiveRecord::Errors 
+    base: *id001
+    errors: {}
+
+I chose to store data in YAML format because of how easy it is to use across many different programming language and platform (not the least of which is Ruby). YAML is dirt simple to read and edit and makes it easy to instantiate new database objects by simply loading it using `YAML::load`.
+
+=== Dependencies
+
+* Git (obviously) - http://git-scm.com/
+
+=== Installation
+
+* sudo gem install joshnabbott-active_record_versionable
+* "Versionify" your model:
+  class User < ActiveRecord::Base
+    versionify
+  end
+
+* When the model is first loaded, Versionable checks to make sure the version directories are there and that a Git repository has been initialized in the versioning directory. If directories are missing they will be created, and if there is no Git repository in the versioning directory, one will be created.
+* Don't forget to .gitignore the versioning directory unless you it and its contents being tracked by your application's SCM. It's easy to do - just type `mate .gitignore` from the root of the app and add:
+  versions/*
+* Make sure to add directory that you specified to store the Versionable versions if you're not using the default.
+
+That's it! Now you've got a versioning directory and the next time you add/edit/delete a record, you will see the version files. Versionable automatically makes your commits so you don't have to worry about a thing. In fact, unless you are dinking with the version files, you should be able to `cd` into the versioning directory at any given time, run `git status` and you should always see:
+  # On branch master
+  nothing to commit (working directory clean)
+
+=== So how about actually accessing these old 'versions' of my model data?
+
+Since the versioning directory is a separate Git repository from the one that you're using for your app (assuming you did in fact .gitignore the versioning directory), you can run any of the regular Git commands from within this directory and see your versioning data. I haven't written any additional functionality beyond just writing the model data to a file and committing it. Honestly, I don't need it yet. I know my way around Git enough that I am more than happy to just use it to play with my version controlled model data.
+
+=== Good methods to know about
+
+Custom versioning directory (please keep in mind that RAILS_ROOT is appended to this directory):
+  class Article
+    versionify :version_directory => 'tmp/versions'
+  end
+
+You can ask the class what it's version directory name is, or even get the path:
+  Article.version_dir #=> "/path/to/rails_app/tmp/versions"
+
+  Article.version_dir_name #=> versions
+
+You can also ask your model object for its version file like so:
+  Article.create.version_file #=> "/path/to/rails_app/tmp/versions/articles/article-4.yml"
+
+=== Some cool examples
+
+Let's say that for whatever reason you would like to instantiate an Article object from several revisions ago (let's just say you wan to do that).
+
+From command line:
+  cd /path/to/rails_app/tmp/versions/articles/
+  git checkout 123456 articles/article-4.yml
+
+From console:
+  article       = Article.find(4) #=> ActiveRecord object
+  revision_file = article.version_file #=> "/path/to/rails_app/tmp/versions/articles/article-4.yml"
+  old_article   = YAML::load(File.open(revision_file)) #=> ActiveRecord object from older version
+
+Viola! It lives. Loading an older version of the record makes it easy to see how things have changed, or what the state of a record was during a certain time.
+
+=== Parting thoughts
+
+So I realize this may or may not be the best way to write an SCM for model data, but for whatever reason I really wanted to do it just because I thought it would be a blast. And it has been. I'm really happy with how it's turned out so far. I haven't really got to use it in a real-life scenario yet, but I'm planning on implementing it in the next few days. It could end up turning out that this is just a total abuse of what Git should be. There are bound to be some downsides of version controlling model data this way. For one: Versionable does make heavy use of executing shell commands (for making commits and whatnot), not to mention the sheer size the Versionable repository could end up being. That really depends on how many models are being versioned, and how often data changes.
+
+It goes without saying knowing Git is sort of a pre-requisite for digging around in the revisions. Luckily, there are tons and tons of great resources on the internet that can help you become the Git ninja we all want to be. I highly recommend learning the hell out of `git log` and `git diff` if you really want to do some impressive stuff.
+
+== Contributing
+
+I'd love all the help I can get on Versionable. If you have any really cool ideas, please feel free to fork the source and let me know when you have a feature you'd like me to check out!
+
+== License
+
+Copyright (c) 2009 Josh N. Abbott (http://iammrjoshua.com), released under the MIT license
